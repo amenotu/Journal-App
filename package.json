@@ -1,0 +1,13 @@
+{
+  "name": "journal",
+  "version": "0.0.0",
+  "main": "server/server.js",
+  "author": "amenotu",
+  "license": "",
+  "devDependencies": {
+    "request": "^2.34.0"
+  },
+  "dependencies": {
+    "bluebird": "^3.4.0"
+  }
+}
