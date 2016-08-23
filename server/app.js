@@ -1,10 +1,8 @@
 //TO-DOs
 //A function that returns the current date and makes it the default value of the datepicker
-//Fix it so that it adds an entry (appends the data to the page) instead of fetching every time?
-//Replace the text file with a database
+//Implement authentication and enable users
+//Create a landing page
 //Implement an edit option for each journal entry
-//Achieve single page app status with Handlebars.js
-//Refactor backend using Express.js
 
 
 /**
@@ -13,41 +11,48 @@
  */
 var App = function(server){
   this.server = server;
+  this.entries = [];
 };
 
 /**
- * Fetch sends a get request to the server to retrieve all entries then makes a call to addEntry to append a
- * journal entry html component to the page. Fetch also calls the clearEntries function to clear the entries div
- * of any prior entries appended to the page
+ * Fetch sends a get request to the server to retrieve all entries then makes a call to addEntry to append a journal entry html component to the page. Fetch also calls the clearEntries function to clear the entries div of any prior entries appended to the page
  * @var {array} dataArray [array containing the data retrieved from the get request in the form of stringified
  * JSON]
  * @var {array} entries [array containing the parsed, formatted data from dataArray]
  * @var {object} parsed [holds the parsed entry data for a single entry]
- * @var {array} temp [array that holds the topic and text of the current parsed entry data, so that the pluses in
- * the strings are replaced with actual spaces]
+ * @var {array} temp [array that holds the topic and text of the current parsed entry data, so that the pluses in the strings are replaced with actual spaces]
  */
 App.prototype.fetch = function(){
+  var context = this;
   app.clearEntries();
 
-  $.get('/entries', function(data) {
-   var dataArray = data.split(",\n");
-   var entries = [];
+  $.ajax({
+    'url': '/entries',
+    'datatype': 'json',
+    'type': 'GET',
+    'success': function(data) {
+      var dataArray = data.split(",\n");
+      var entries = [];
 
-   dataArray.forEach(function(entry){
-    if(entry){
-     var parsed = JSON.parse(entry);
-     var temp = [parsed.topic, parsed.text];
-     // parsed.text = temp[1].replace(/\+/gi, " ");
-     parsed.text = temp[1].replace(/\+\+/, "[plus]").replace(/\+/gi, " ").replace("[plus]", " +");
-     parsed.topic = temp[0].replace(/\+/gi, " ");
-     entries.push(parsed); 
+      dataArray.forEach(function(entry){
+        if(entry){
+          var parsed = JSON.parse(entry);
+          var temp = [parsed.topic, parsed.text];
+          parsed.text = temp[1].replace(/\+\+/, "[plus]").replace(/\+/gi, " ").replace("[plus]", " +");
+          parsed.topic = temp[0].replace(/\+/gi, " ");
+          entries.push(parsed); 
+        }
+      });
+
+      context.entries = app.sortByDate(entries);
+
+      entries.forEach(function(entryObj){
+        app.addEntry(entryObj);
+      });
+    },
+    'error': function(err) {
+      console.log("There was an error fetching the data: ", err);
     }
-   });
-
-   entries.forEach(function(entryObj){
-     app.addEntry(entryObj);
-   });
-
   });
 };
 
@@ -57,19 +62,32 @@ App.prototype.fetch = function(){
  * @var {object} content [the content object contains the date, topic and text information from inputs]
  */
 App.prototype.handleSubmit = function(){
-  // var content = {
-  //   date: null,
-  //   topic: null,
-  //   text: null
-  // };
+  var content = {
+    date: null,
+    topic: null,
+    text: null
+  };
 
-  // content.date = $('#date').val();
-  // content.topic = $('#topic').val();
-  // content.text = $('textarea').val();
+  content.date = $('#date').val();
+  content.topic = $('#topic').val();
+  content.text = $('textarea').val();
 
-  // console.log("Here's your content: ", content);
+  this.entries.push(content);
+  app.sortByDate(this.entries);
 
-  $.post("/entry", $("#journal-entry").serialize());
+  var data = $("#journal-entry").serialize();
+  $.ajax({
+    'url': '/entry',
+    'datatype': 'json',
+    'type': 'POST',
+    'data': data,
+    'success': function(){
+      app.appendEntry();
+    },
+    'error': function(err){
+      console.log("There was an error saving the entry: ", err);
+    }
+  });
 };
 
 /**
@@ -99,21 +117,20 @@ App.prototype.addEntry = function(entry){
   $journalEntry.appendTo('div.entries');
 };
 
+/**
+ * appendEntry clears current entries appended to the entries div, then appends entries to the entries after the entries property has been updated (when a new entry is added) or when the page is first loaded
+ */
 App.prototype.appendEntry = function(){
-  var content = {
-    date: null,
-    topic: null,
-    text: null
-  };
-
-  content.date = $('#date').val();
-  content.topic = $('#topic').val();
-  content.text = $('textarea').val();
-
-  console.log("Here's your content: ", content);
-  app.addEntry(content);
+  app.clearEntries();
+  this.entries.forEach(function(entry){
+    app.addEntry(entry);
+  });
 };
 
+/**
+ * removeEntry removes the current entry from the front-end
+ * @param  {object} event [object to get the current entry to be deleted]
+ */
 App.prototype.removeEntry = function(event){
   var currentEntry = $(event.target).parent().parent();
   var children = currentEntry.children().slice(0,7);
@@ -137,6 +154,10 @@ App.prototype.removeEntry = function(event){
   app.deleteEntry(content);
 };
 
+/**
+ * deleteEntry will send an AJAX request to the server to delete the current entry
+ * @param  {object} data [JSON data of the current entry to be deleted]
+ */
 App.prototype.deleteEntry = function(data){
   $.ajax({
     'url': '/deleteEntries',
@@ -164,19 +185,19 @@ App.prototype.formatDate = function(date){
   var temp = date.split('-'),
    dateStr = '',
     months = {
-            '01': 'January',
-            '02': 'February',
-            '03': 'March',
-            '04': 'April',
-            '05': 'May',
-            '06': 'June',
-            '07': 'July',
-            '08': 'August',
-            '09': 'September',
-            '10': 'October',
-            '11': 'November',
-            '12': 'December'
-            };
+    '01': 'January',
+    '02': 'February',
+    '03': 'March',
+    '04': 'April',
+    '05': 'May',
+    '06': 'June',
+    '07': 'July',
+    '08': 'August',
+    '09': 'September',
+    '10': 'October',
+    '11': 'November',
+    '12': 'December'
+    };
 
   if(months.hasOwnProperty(temp[1])){
     dateStr = months[temp[1]] + ' ' + temp[2] + ', ' + temp[0];
@@ -185,6 +206,11 @@ App.prototype.formatDate = function(date){
   return dateStr;
 };
 
+/**
+ * revertDate changes the date back to the yyyy-mm-dd format
+ * @param  {string} date [date string of an entry in "month day, year" format]
+ * @return {string} revertedDate [date string in yyyy-mm-dd format]
+ */
 App.prototype.revertDate = function(date){
       var temp = date.split(' '),
   revertedDate = '',
@@ -201,13 +227,42 @@ App.prototype.revertDate = function(date){
     'October':'10',
     'November':'11',
     'December':'12'
-  };
+    };
 
   if(monthToNum.hasOwnProperty(temp[0])){
     revertedDate = temp[2] + '-' + monthToNum[temp[0]] + '-' + temp[1].replace(/,/gi, '');
   }
   
   return revertedDate;
+};
+
+/**
+ * sortByDate sorts entries by date in ascending order (oldest entries to newest entries)
+ * @param  {array of objects} entries [array of entry objects, unsorted]
+ * @return {array of objects}         [array of entry objects, sorted in ascending order]
+ */
+App.prototype.sortByDate = function(entries){
+  var months = {
+    '01': '00',
+    '02': '01',
+    '03': '02',
+    '04': '03',
+    '05': '04',
+    '06': '05',
+    '07': '06',
+    '08': '07',
+    '09': '08',
+    '10': '09',
+    '11': '10',
+    '12': '11'
+    }
+
+  return entries.sort(function(a,b){
+    var dateForA = a.date.split('-'),
+        dateForB = b.date.split('-');
+
+    return new Date(dateForA[0], months[dateForA[1]], dateForA[2]) - new Date(dateForB[0], months[dateForB[1]], dateForB[2]);
+  });
 };
 
 /**
@@ -228,8 +283,7 @@ App.prototype.clearEntries = function(){
 };
 
 /**
- * checkFormValidity will return true or false to see if the form is valid, used to enable/disable the submit
- * button. the submit button will only be enabled when this function returns true (when the form is valid)
+ * checkFormValidity will return true or false to see if the form is valid, used to enable/disable the submit button. the submit button will only be enabled when this function returns true (when the form is valid)
  * @return {boolean} [returns true if the form is valid, false if the form is invalid]
  */
 App.prototype.checkFormValidity = function(){
@@ -242,20 +296,10 @@ $(document).ready(function() {
   $(window).load(function() {
     app.fetch();
   });
-
-  // $('#fetch-btn').on('click', function(){
-  //   app.fetch();
-  // });
   
-  // $('#journal-entry').on('change', function(){
-  //   if(app.checkFormValidity()){
-  //     $("#submit-btn").prop('disabled', false);
-  //   }
-  // });
-  
-  $('#submit-btn').on('click', function(){
+  $('#submit-btn').on('click', function(event){
+    event.preventDefault();
     app.handleSubmit();
-    app.appendEntry();
   });
 
   $('div.submit-btn-container').on('mouseover', function(){
