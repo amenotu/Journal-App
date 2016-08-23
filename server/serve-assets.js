@@ -48,7 +48,6 @@ var serveAssets = function(response, asset){
 };
 
 exports.serveStatic = function(request, response){
-  console.log("THIS IS REQUEST: ", request);
   var filePath = url.parse(request.url).pathname;
   console.log('Currently getting file: ', filePath);
 
